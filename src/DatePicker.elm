@@ -321,6 +321,11 @@ focusedDate (DatePicker model) =
     model.focused
 
 
+inputText : Maybe Date -> Maybe Date -> Settings -> Maybe String
+inputText startDate finishDate settings =
+    Maybe.map2 (++) (Maybe.map settings.dateFormatter finishDate) (Maybe.map ((++) " - ") (Maybe.map settings.dateFormatter startDate))
+
+
 {-| A sugaring of `Maybe` to explicitly tell you how to interpret `Changed Nothing`, because `Just Nothing` seems somehow wrong.
 Used to represent a request, by the datepicker, to change the selected date.
 -}
@@ -343,12 +348,7 @@ update settings msg (DatePicker ({ forceOpen, focused, rangeCondition } as model
             { model | focused = Just date } ! []
 
         MouseLeave ->
-            case rangeCondition.isStartPicked && rangeCondition.isFinishPicked of
-                True ->
-                    { model | open = False } ! []
-
-                _ ->
-                    model ! []
+            { model | open = False } ! []
 
         Over date ->
             { model
@@ -538,7 +538,7 @@ pick =
 {-| The date picker view. The Date passed is whatever date it should treat as selected.
 -}
 view : Maybe Date -> Settings -> DatePicker -> Html Msg
-view pickedDate settings (DatePicker ({ open } as model)) =
+view pickedDate settings (DatePicker ({ open, rangeCondition } as model)) =
     let
         class =
             mkClass settings
@@ -574,8 +574,14 @@ view pickedDate settings (DatePicker ({ open } as model)) =
                 [ placeholder settings.placeholder
                 , model.inputText
                     |> Maybe.withDefault
-                        (Maybe.map settings.dateFormatter pickedDate
-                            |> Maybe.withDefault ""
+                        (case settings.isRange of
+                            True ->
+                                inputText rangeCondition.startDate rangeCondition.finishDate settings
+                                    |> Maybe.withDefault ""
+
+                            False ->
+                                Maybe.map settings.dateFormatter pickedDate
+                                    |> Maybe.withDefault ""
                         )
                     |> defaultValue
                 ]
