@@ -39,7 +39,7 @@ import Date exposing (Date, Day(..), Month, day, month, year)
 import DatePicker.Date exposing (..)
 import Html exposing (..)
 import Html.Attributes as Attrs exposing (defaultValue, href, placeholder, selected, tabindex, type_, value)
-import Html.Events exposing (on, onBlur, onClick, onFocus, onInput, onMouseOver, onWithOptions, targetValue)
+import Html.Events exposing (on, onBlur, onClick, onFocus, onInput, onMouseLeave, onMouseOver, onWithOptions, targetValue)
 import Html.Keyed
 import Json.Decode as Json
 import Task
@@ -58,6 +58,7 @@ type Msg
     | MouseDown
     | MouseUp
     | Over (Maybe Date)
+    | MouseLeave
 
 
 {-| The type of date picker settings.
@@ -108,6 +109,8 @@ type alias RangeCondition =
     { isStartPicked : Bool
     , isFinishPicked : Bool
     , hoverDate : Maybe Date
+    , startDate : Maybe Date
+    , finishDate : Maybe Date
     }
 
 
@@ -223,6 +226,8 @@ initRangeCondition =
     { isStartPicked = False
     , isFinishPicked = False
     , hoverDate = Nothing
+    , startDate = Nothing
+    , finishDate = Nothing
     }
 
 
@@ -338,6 +343,14 @@ update settings msg (DatePicker ({ forceOpen, focused, rangeCondition } as model
         ChangeFocus date ->
             { model | focused = Just date } ! []
 
+        MouseLeave ->
+            case rangeCondition.isStartPicked && rangeCondition.isFinishPicked of
+                True ->
+                    { model | open = False } ! []
+
+                _ ->
+                    model ! []
+
         Over date ->
             { model
                 | rangeCondition =
@@ -367,29 +380,32 @@ update settings msg (DatePicker ({ forceOpen, focused, rangeCondition } as model
                                 True ->
                                     ( DatePicker <|
                                         { model
-                                            | open = False
+                                            | open = True
                                             , inputText = Nothing
                                             , focused = Nothing
                                             , rangeCondition =
                                                 { rangeCondition
-                                                    | isStartPicked = False
+                                                    | isStartPicked = True
                                                     , isFinishPicked = False
+                                                    , startDate = date
+                                                    , finishDate = Nothing
                                                 }
                                         }
                                     , Cmd.none
-                                    , NoChange
+                                    , StartChanged date
                                     )
 
                                 False ->
                                     ( DatePicker <|
                                         { model
-                                            | open = False
+                                            | open = True
                                             , inputText = Nothing
                                             , focused = Nothing
                                             , rangeCondition =
                                                 { rangeCondition
-                                                    | isStartPicked = False
-                                                    , isFinishPicked = False
+                                                    | isStartPicked = True
+                                                    , isFinishPicked = True
+                                                    , finishDate = date
                                                 }
                                         }
                                     , Cmd.none
@@ -406,6 +422,7 @@ update settings msg (DatePicker ({ forceOpen, focused, rangeCondition } as model
                                         { rangeCondition
                                             | isStartPicked = True
                                             , isFinishPicked = False
+                                            , startDate = date
                                         }
                                 }
                             , Cmd.none
@@ -558,6 +575,14 @@ isLater maybeDate date =
         |> Maybe.withDefault False
 
 
+isEqual : Maybe Date -> Date -> Bool
+isEqual maybeDate date =
+    maybeDate
+        |> Maybe.map
+            (dateTuple >> (==) (dateTuple date))
+        |> Maybe.withDefault False
+
+
 datePicker : Maybe Date -> Settings -> Model -> Html Msg
 datePicker pickedDate settings ({ focused, today, rangeCondition } as model) =
     let
@@ -591,19 +616,24 @@ datePicker pickedDate settings ({ focused, today, rangeCondition } as model) =
         inRange d =
             case rangeCondition.isStartPicked of
                 True ->
-                    if isLater pickedDate d && not (isLater rangeCondition.hoverDate d) then
-                        True
-                    else
-                        False
+                    case rangeCondition.isFinishPicked of
+                        False ->
+                            if isLater rangeCondition.startDate d && not (isLater rangeCondition.hoverDate d) then
+                                True
+                            else
+                                False
+
+                        True ->
+                            if isLater rangeCondition.startDate d && not (isLater rangeCondition.finishDate d) then
+                                True
+                            else
+                                False
 
                 False ->
                     False
 
         picked d =
-            pickedDate
-                |> Maybe.map
-                    (dateTuple >> (==) (dateTuple d))
-                |> Maybe.withDefault False
+            isEqual pickedDate d || isEqual rangeCondition.finishDate d || isEqual rangeCondition.startDate d
 
         day d =
             let
@@ -668,6 +698,7 @@ datePicker pickedDate settings ({ focused, today, rangeCondition } as model) =
         [ class "picker"
         , onPicker "mousedown" MouseDown
         , onPicker "mouseup" MouseUp
+        , onMouseLeave MouseLeave
         ]
         [ div [ class "picker-header" ]
             [ div [ class "prev-container" ]
