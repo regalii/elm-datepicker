@@ -327,8 +327,7 @@ Used to represent a request, by the datepicker, to change the selected date.
 type DateEvent
     = NoChange
     | Changed (Maybe Date)
-    | StartChanged (Maybe Date)
-    | FinishChanged (Maybe Date)
+    | RangeChanged (Maybe Date) (Maybe Date)
 
 
 {-| The date picker update function. The third tuple member represents a user action to change the
@@ -392,25 +391,48 @@ update settings msg (DatePicker ({ forceOpen, focused, rangeCondition } as model
                                                 }
                                         }
                                     , Cmd.none
-                                    , StartChanged date
+                                    , RangeChanged date Nothing
                                     )
 
                                 False ->
-                                    ( DatePicker <|
-                                        { model
-                                            | open = True
-                                            , inputText = Nothing
-                                            , focused = Nothing
-                                            , rangeCondition =
-                                                { rangeCondition
-                                                    | isStartPicked = True
-                                                    , isFinishPicked = True
-                                                    , finishDate = date
+                                    case
+                                        Maybe.map (isLater rangeCondition.startDate) date
+                                            |> Maybe.withDefault False
+                                    of
+                                        True ->
+                                            ( DatePicker <|
+                                                { model
+                                                    | open = True
+                                                    , inputText = Nothing
+                                                    , focused = Nothing
+                                                    , rangeCondition =
+                                                        { rangeCondition
+                                                            | isStartPicked = True
+                                                            , isFinishPicked = True
+                                                            , finishDate = date
+                                                        }
                                                 }
-                                        }
-                                    , Cmd.none
-                                    , FinishChanged date
-                                    )
+                                            , Cmd.none
+                                            , RangeChanged rangeCondition.startDate date
+                                            )
+
+                                        False ->
+                                            ( DatePicker <|
+                                                { model
+                                                    | open = True
+                                                    , inputText = Nothing
+                                                    , focused = Nothing
+                                                    , rangeCondition =
+                                                        { rangeCondition
+                                                            | isStartPicked = False
+                                                            , isFinishPicked = False
+                                                            , finishDate = Nothing
+                                                            , startDate = Nothing
+                                                        }
+                                                }
+                                            , Cmd.none
+                                            , RangeChanged Nothing Nothing
+                                            )
 
                         False ->
                             ( DatePicker <|
@@ -423,10 +445,11 @@ update settings msg (DatePicker ({ forceOpen, focused, rangeCondition } as model
                                             | isStartPicked = True
                                             , isFinishPicked = False
                                             , startDate = date
+                                            , finishDate = Nothing
                                         }
                                 }
                             , Cmd.none
-                            , StartChanged date
+                            , RangeChanged date Nothing
                             )
 
         Text text ->
@@ -571,7 +594,7 @@ isLater : Maybe Date -> Date -> Bool
 isLater maybeDate date =
     maybeDate
         |> Maybe.map
-            (dateTuple >> (>=) (dateTuple date))
+            (dateTuple >> (>) (dateTuple date))
         |> Maybe.withDefault False
 
 
