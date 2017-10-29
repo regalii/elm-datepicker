@@ -76,6 +76,9 @@
   .elm-datepicker--day:hover {
     background: #F2F2F2; }
 
+.elm-datepicker--range {
+  background: #F2F2F2; }
+
 .elm-datepicker--disabled {
   cursor: default;
   color: #DDD; }
