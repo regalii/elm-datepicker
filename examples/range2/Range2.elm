@@ -1,8 +1,8 @@
 module Range2 exposing (main)
 
 import Date exposing (Date, Day(..), day, dayOfWeek, month, year)
-import DatePicker exposing (DateEvent(..), defaultSettings)
 import Html exposing (Html, div, h1, text)
+import RangeDatePicker as DatePicker exposing (DateEvent(..), defaultSettings)
 
 
 type Msg
@@ -18,7 +18,7 @@ type alias Model =
 
 settings : DatePicker.Settings
 settings =
-    { defaultSettings | isRange = True }
+    defaultSettings
 
 
 init : ( Model, Cmd Msg )
@@ -43,10 +43,16 @@ update msg ({ startDate, finishDate, datePicker } as model) =
                     DatePicker.update settings msg datePicker
             in
             case dateEvent of
-                RangeChanged startDate finishDate ->
+                ChangedStart date ->
                     { model
-                        | startDate = startDate
-                        , finishDate = finishDate
+                        | startDate = date
+                        , datePicker = newDatePicker
+                    }
+                        ! [ Cmd.map ToDatePicker datePickerFx ]
+
+                ChangedFinish date ->
+                    { model
+                        | finishDate = date
                         , datePicker = newDatePicker
                     }
                         ! [ Cmd.map ToDatePicker datePickerFx ]
@@ -73,7 +79,7 @@ view ({ startDate, finishDate, datePicker } as model) =
 
             Just date ->
                 h1 [] [ text <| formatDate date ]
-        , DatePicker.view startDate settings datePicker
+        , DatePicker.view startDate finishDate settings datePicker
             |> Html.map ToDatePicker
         ]
 
