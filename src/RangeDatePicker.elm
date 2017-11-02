@@ -14,8 +14,7 @@ module RangeDatePicker
         , isOpen
         , moreOrLess
         , off
-        , pickFinish
-        , pickStart
+        , pick
         , to
         , update
         , view
@@ -32,7 +31,7 @@ module RangeDatePicker
 
 # Settings
 
-@docs Settings, defaultSettings, pickStart, pickFinish, between, moreOrLess, from, to, off
+@docs Settings, defaultSettings, pick, between, moreOrLess, from, to, off
 
 -}
 
@@ -40,7 +39,7 @@ import Date exposing (Date, Day(..), Month, day, month, year)
 import DatePicker.Date exposing (..)
 import Html exposing (..)
 import Html.Attributes as Attrs exposing (defaultValue, href, placeholder, selected, tabindex, type_, value)
-import Html.Events exposing (on, onBlur, onClick, onFocus, onInput, onMouseLeave, onMouseOver, onWithOptions, targetValue)
+import Html.Events exposing (on, onBlur, onClick, onFocus, onInput, onMouseOver, onWithOptions, targetValue)
 import Html.Keyed
 import Json.Decode as Json
 import Task
@@ -51,18 +50,15 @@ import Task
 type Msg
     = CurrentDate Date
     | ChangeFocus Date
-    | PickStart (Maybe Date)
-    | PickFinish (Maybe Date)
-    | StartText String
-    | FinishText String
-    | SubmitText (Maybe String) (Maybe Date -> DateEvent)
-    | Focus (Maybe Date -> Msg)
+    | Pick (Maybe Date) (Maybe Date) (Maybe Date)
+    | Text String
+    | SubmitText
+    | Focus
     | Blur
     | MouseDown
     | MouseUp
     | Over (Maybe Date)
-    | MouseLeave
-    | ErrorClick
+    | Close
 
 
 {-| The type of date picker settings.
@@ -93,24 +89,17 @@ type alias Model =
         Maybe Date
 
     -- date currently center-focused by picker, but not necessarily chosen
-    , inputStartText :
+    , inputText :
         Maybe String
 
-    -- for user start input that hasn't yet been submitted
-    , inputFinishText :
-        Maybe String
-
-    -- for user finsh input that hasn't yet been submitted
+    -- for user input that hasn't yet been submitted
     , today :
         Date
 
     -- actual, current day as far as we know
     , hoverDate : Maybe Date
 
-    -- mouse hovered dates for drawing background color of range
-    , pickEvent : Maybe Date -> Msg
-
-    -- PickStart or PickFinish depends on who's initiator of datapicker opening
+    -- date currently hovered by mouse, but not necessarily chosen
     }
 
 
@@ -238,11 +227,9 @@ init =
         { open = False
         , forceOpen = False
         , focused = Just initDate
-        , inputStartText = Nothing
-        , inputFinishText = Nothing
+        , inputText = Nothing
         , today = initDate
         , hoverDate = Nothing
-        , pickEvent = PickStart
         }
     , Task.perform CurrentDate Date.now
     )
@@ -260,11 +247,9 @@ initFromDate date =
         { open = False
         , forceOpen = False
         , focused = Just date
-        , inputStartText = Nothing
-        , inputFinishText = Nothing
+        , inputText = Nothing
         , today = date
         , hoverDate = Nothing
-        , pickEvent = PickStart
         }
 
 
@@ -280,11 +265,9 @@ initFromDates today date =
         { open = False
         , forceOpen = False
         , focused = date
-        , inputStartText = Nothing
-        , inputFinishText = Nothing
+        , inputText = Nothing
         , today = today
         , hoverDate = Nothing
-        , pickEvent = PickStart
         }
 
 
@@ -316,25 +299,30 @@ focusedDate (DatePicker model) =
     model.focused
 
 
-inputText : Maybe Date -> Maybe Date -> Settings -> Maybe String
-inputText startDate finishDate settings =
-    Maybe.map2 (++) (Maybe.map settings.dateFormatter finishDate) (Maybe.map ((++) " - ") (Maybe.map settings.dateFormatter startDate))
-
-
 {-| A sugaring of `Maybe` to explicitly tell you how to interpret `Changed Nothing`, because `Just Nothing` seems somehow wrong.
 Used to represent a request, by the datepicker, to change the selected date.
 -}
 type DateEvent
     = NoChange
-    | ChangedStart (Maybe Date)
-    | ChangedFinish (Maybe Date)
+    | Changed (Maybe Date) (Maybe Date)
+
+
+inDirection : Maybe Date -> Maybe Date -> ( Maybe Date, Maybe Date, Bool )
+inDirection firstDate secondDate =
+    if
+        Maybe.map2 (<) (Maybe.map dateTuple firstDate) (Maybe.map dateTuple secondDate)
+            |> Maybe.withDefault True
+    then
+        ( firstDate, secondDate, True )
+    else
+        ( secondDate, firstDate, False )
 
 
 {-| The date picker update function. The third tuple member represents a user action to change the
 date.
 -}
 update : Settings -> Msg -> DatePicker -> ( DatePicker, Cmd Msg, DateEvent )
-update settings msg (DatePicker ({ forceOpen, focused, hoverDate } as model)) =
+update settings msg (DatePicker ({ forceOpen, focused } as model)) =
     case msg of
         CurrentDate date ->
             { model | focused = Just date, today = date } ! []
@@ -342,46 +330,38 @@ update settings msg (DatePicker ({ forceOpen, focused, hoverDate } as model)) =
         ChangeFocus date ->
             { model | focused = Just date } ! []
 
-        MouseLeave ->
-            { model | open = False } ! []
-
-        Over date ->
-            { model
-                | hoverDate = date
-            }
-                ! []
-
-        PickStart date ->
+        Pick firstDate secondDate date ->
+            let
+                ( startDate, finishDate, _ ) =
+                    inDirection firstDate secondDate
+            in
             ( DatePicker <|
                 { model
-                    | open = True
-                    , inputStartText = Nothing
+                    | inputText = Nothing
                     , focused = Nothing
-                    , pickEvent = PickFinish
                 }
             , Cmd.none
-            , ChangedStart date
+            , case startDate of
+                Nothing ->
+                    Changed date Nothing
+
+                _ ->
+                    case finishDate of
+                        Nothing ->
+                            let
+                                ( earlierDate, laterDate, _ ) =
+                                    inDirection startDate date
+                            in
+                            Changed earlierDate laterDate
+
+                        _ ->
+                            Changed date Nothing
             )
 
-        PickFinish date ->
-            ( DatePicker <|
-                { model
-                    | open = True
-                    , inputStartText = Nothing
-                    , focused = Nothing
-                    , pickEvent = PickStart
-                }
-            , Cmd.none
-            , ChangedFinish date
-            )
+        Text text ->
+            { model | inputText = Just text } ! []
 
-        StartText text ->
-            { model | inputStartText = Just text } ! []
-
-        FinishText text ->
-            { model | inputFinishText = Just text } ! []
-
-        SubmitText inputText dateEventChanged ->
+        SubmitText ->
             let
                 isWhitespace =
                     String.trim >> String.isEmpty
@@ -389,15 +369,15 @@ update settings msg (DatePicker ({ forceOpen, focused, hoverDate } as model)) =
                 dateEvent =
                     let
                         text =
-                            inputText ?> ""
+                            model.inputText ?> ""
                     in
                     if isWhitespace text then
-                        dateEventChanged Nothing
+                        Changed Nothing Nothing
                     else
                         text
                             |> settings.parser
                             |> Result.map
-                                (dateEventChanged
+                                (Changed Nothing
                                     << (\date ->
                                             if settings.isDisabled date then
                                                 Nothing
@@ -409,34 +389,27 @@ update settings msg (DatePicker ({ forceOpen, focused, hoverDate } as model)) =
             in
             ( DatePicker <|
                 { model
-                    | inputStartText =
+                    | inputText =
                         case dateEvent of
-                            NoChange ->
-                                model.inputStartText
-
-                            _ ->
+                            Changed _ _ ->
                                 Nothing
-                    , inputFinishText =
-                        case dateEvent of
-                            NoChange ->
-                                model.inputFinishText
 
-                            _ ->
-                                Nothing
+                            NoChange ->
+                                model.inputText
                     , focused =
                         case dateEvent of
+                            Changed _ _ ->
+                                Nothing
+
                             NoChange ->
                                 model.focused
-
-                            _ ->
-                                Nothing
                 }
             , Cmd.none
             , dateEvent
             )
 
-        Focus pickEvent ->
-            { model | open = True, forceOpen = False, pickEvent = pickEvent } ! []
+        Focus ->
+            { model | open = True, forceOpen = False } ! []
 
         Blur ->
             { model | open = forceOpen } ! []
@@ -447,8 +420,11 @@ update settings msg (DatePicker ({ forceOpen, focused, hoverDate } as model)) =
         MouseUp ->
             { model | forceOpen = False } ! []
 
-        ErrorClick ->
-            model ! []
+        Over date ->
+            { model | hoverDate = date } ! []
+
+        Close ->
+            { model | open = False } ! []
 
 
 {-| Generate a message that will act as if the user has chosen a certain date,
@@ -461,27 +437,20 @@ Rather, it will:
 
   - replace the input text with the new value
 
-  - close the picker for second pick
+  - close the picker
 
-    update datepickerSettings (pick (Just someDate)) datepicker
+    update datepickerSettings (pick firstPickedDate secondPickedDate (Just someDate)) datepicker
 
 -}
-pickStart : Maybe Date -> Msg
-pickStart =
-    PickStart
-
-
-{-| Like under
--}
-pickFinish : Maybe Date -> Msg
-pickFinish =
-    PickFinish
+pick : Maybe Date -> Maybe Date -> Maybe Date -> Msg
+pick =
+    Pick
 
 
 {-| The date picker view. The Date passed is whatever date it should treat as selected.
 -}
 view : Maybe Date -> Maybe Date -> Settings -> DatePicker -> Html Msg
-view startDate finishDate settings (DatePicker ({ open, pickEvent } as model)) =
+view firstDate secondDate settings (DatePicker ({ open } as model)) =
     let
         class =
             mkClass settings
@@ -495,16 +464,16 @@ view startDate finishDate settings (DatePicker ({ open, pickEvent } as model)) =
             [ ( settings.classNamespace ++ "input", True ) ]
                 ++ settings.inputClassList
 
-        inputCommon inputText textEvent dateEvent pickEvent xs =
+        inputCommon xs =
             input
                 ([ Attrs.classList inputClasses
                  , Attrs.name (settings.inputName ?> "")
                  , type_ "text"
-                 , on "change" (Json.succeed (SubmitText inputText dateEvent))
-                 , onInput textEvent
+                 , on "change" (Json.succeed SubmitText)
+                 , onInput Text
                  , onBlur Blur
-                 , onClick (Focus pickEvent)
-                 , onFocus (Focus pickEvent)
+                 , onClick Focus
+                 , onFocus Focus
                  ]
                     ++ settings.inputAttributes
                     ++ potentialInputId
@@ -512,54 +481,32 @@ view startDate finishDate settings (DatePicker ({ open, pickEvent } as model)) =
                 )
                 []
 
-        dateInput inputText textEvent dateEvent date pickEvent =
+        dateInput =
             inputCommon
-                inputText
-                textEvent
-                dateEvent
-                pickEvent
                 [ placeholder settings.placeholder
-                , inputText
+                , model.inputText
                     |> Maybe.withDefault
-                        (Maybe.map settings.dateFormatter date
+                        (Maybe.map settings.dateFormatter firstDate
                             |> Maybe.withDefault ""
                         )
-                    |> defaultValue
+                    |> value
                 ]
     in
     Html.Keyed.node "div"
         [ class "container" ]
-        [ ( "dateInput", dateInput model.inputStartText StartText ChangedStart startDate PickStart )
-        , ( "text", text " - " )
-        , ( "dateInput", dateInput model.inputFinishText FinishText ChangedFinish finishDate PickFinish )
+        [ ( "dateInput", dateInput )
         , if open then
-            ( "datePicker", datePicker startDate finishDate settings pickEvent model )
+            ( "datePicker", datePicker firstDate secondDate settings model )
           else
             ( "text", text "" )
         ]
 
 
-isLater : Maybe Date -> Date -> Bool
-isLater maybeDate date =
-    maybeDate
-        |> Maybe.map
-            (dateTuple >> (>) (dateTuple date))
-        |> Maybe.withDefault False
-
-
-isEqual : Maybe Date -> Date -> Bool
-isEqual maybeDate date =
-    maybeDate
-        |> Maybe.map
-            (dateTuple >> (==) (dateTuple date))
-        |> Maybe.withDefault False
-
-
-datePicker : Maybe Date -> Maybe Date -> Settings -> (Maybe Date -> Msg) -> Model -> Html Msg
-datePicker startDate finishDate settings pickEvent ({ focused, today, hoverDate } as model) =
+datePicker : Maybe Date -> Maybe Date -> Settings -> Model -> Html Msg
+datePicker firstDate secondDate settings ({ focused, today, hoverDate } as model) =
     let
         currentDate =
-            focused ??> startDate ?> today
+            focused ??> firstDate ?> today
 
         { currentMonth, currentDates } =
             prepareDates currentDate settings.firstDayOfWeek
@@ -586,6 +533,10 @@ datePicker startDate finishDate settings pickEvent ({ focused, today, hoverDate 
             td [ class "dow" ] [ text <| settings.dayFormatter d ]
 
         inRange d =
+            let
+                ( startDate, finishDate, _ ) =
+                    inDirection firstDate secondDate
+            in
             case startDate of
                 Nothing ->
                     False
@@ -593,19 +544,45 @@ datePicker startDate finishDate settings pickEvent ({ focused, today, hoverDate 
                 _ ->
                     case finishDate of
                         Nothing ->
-                            if isLater startDate d && not (isLater hoverDate d) then
+                            let
+                                ( _, _, isLaterThenStart ) =
+                                    inDirection startDate d
+
+                                ( _, _, isEarlierThenHover ) =
+                                    inDirection d hoverDate
+                            in
+                            if
+                                (isLaterThenStart && isEarlierThenHover)
+                                    || (not isLaterThenStart && not isEarlierThenHover)
+                            then
                                 True
                             else
                                 False
 
                         _ ->
-                            if isLater startDate d && not (isLater finishDate d) then
+                            let
+                                ( _, _, isLaterThenStart ) =
+                                    inDirection startDate d
+
+                                ( _, _, isEarlierThenFinish ) =
+                                    inDirection d finishDate
+                            in
+                            if isLaterThenStart && isEarlierThenFinish then
                                 True
                             else
                                 False
 
         picked d =
-            isEqual finishDate d || isEqual startDate d
+            (firstDate
+                |> Maybe.map
+                    (dateTuple >> (==) (dateTuple d))
+                |> Maybe.withDefault False
+            )
+                || (secondDate
+                        |> Maybe.map
+                            (dateTuple >> (==) (dateTuple d))
+                        |> Maybe.withDefault False
+                   )
 
         day d =
             let
@@ -614,7 +591,7 @@ datePicker startDate finishDate settings pickEvent ({ focused, today, hoverDate 
 
                 props =
                     if not disabled then
-                        [ onClick (pickEvent (Just d))
+                        [ onClick (Pick firstDate secondDate (Just d))
                         , onMouseOver (Over (Just d))
                         ]
                     else
@@ -627,7 +604,7 @@ datePicker startDate finishDate settings pickEvent ({ focused, today, hoverDate 
                     , ( "picked", picked d )
                     , ( "today", dateTuple d == dateTuple currentDate )
                     , ( "other-month", month currentMonth /= month d )
-                    , ( "range", inRange d )
+                    , ( "range", inRange (Just d) )
                     ]
                  ]
                     ++ props
@@ -670,7 +647,8 @@ datePicker startDate finishDate settings pickEvent ({ focused, today, hoverDate 
         [ class "picker"
         , onPicker "mousedown" MouseDown
         , onPicker "mouseup" MouseUp
-        , onMouseLeave MouseLeave
+        , tabindex 2
+        , onBlur Close
         ]
         [ div [ class "picker-header" ]
             [ div [ class "prev-container" ]

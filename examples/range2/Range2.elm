@@ -43,16 +43,10 @@ update msg ({ startDate, finishDate, datePicker } as model) =
                     DatePicker.update settings msg datePicker
             in
             case dateEvent of
-                ChangedStart date ->
+                Changed startDate finishDate ->
                     { model
-                        | startDate = date
-                        , datePicker = newDatePicker
-                    }
-                        ! [ Cmd.map ToDatePicker datePickerFx ]
-
-                ChangedFinish date ->
-                    { model
-                        | finishDate = date
+                        | startDate = startDate
+                        , finishDate = finishDate
                         , datePicker = newDatePicker
                     }
                         ! [ Cmd.map ToDatePicker datePickerFx ]
