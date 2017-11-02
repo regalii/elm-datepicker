@@ -49,8 +49,9 @@ import Task
 -}
 type Msg
     = CurrentDate Date
-    | ChangeFocus Date
-    | Pick (Maybe Date) (Maybe Date) (Maybe Date)
+    | ChangeFirstFocus Date
+    | ChangeSecondFocus Date
+    | Pick (Maybe Date) (Maybe Date) (Maybe Date) WhichPicker
     | Text String
     | SubmitText
     | Focus
@@ -84,10 +85,14 @@ type alias Settings =
 type alias Model =
     { open : Bool
     , forceOpen : Bool
-    , focused :
+    , firstFocused :
         Maybe Date
 
-    -- date currently center-focused by picker, but not necessarily chosen
+    -- date currently center-focused by first picker, but not necessarily chosen
+    , secondFocused :
+        Maybe Date
+
+    -- date currently center-focused by second picker, but not necessarily chosen
     , inputText :
         Maybe String
 
@@ -106,6 +111,11 @@ type alias Model =
 -}
 type DatePicker
     = DatePicker Model
+
+
+type WhichPicker
+    = FirstPicker
+    | SecondPicker
 
 
 {-| A record of default settings for the date picker. Extend this if
@@ -225,7 +235,8 @@ init =
     ( DatePicker <|
         { open = False
         , forceOpen = False
-        , focused = Just initDate
+        , secondFocused = Just initDate
+        , firstFocused = Just initDate
         , inputText = Nothing
         , today = initDate
         , hoverDate = Nothing
@@ -245,7 +256,8 @@ initFromDate date =
     DatePicker <|
         { open = False
         , forceOpen = False
-        , focused = Just date
+        , secondFocused = Just date
+        , firstFocused = Just date
         , inputText = Nothing
         , today = date
         , hoverDate = Nothing
@@ -263,7 +275,8 @@ initFromDates today date =
     DatePicker <|
         { open = False
         , forceOpen = False
-        , focused = date
+        , secondFocused = date
+        , firstFocused = date
         , inputText = Nothing
         , today = today
         , hoverDate = Nothing
@@ -291,11 +304,11 @@ isOpen (DatePicker model) =
     model.open
 
 
-{-| Expose the currently focused date
+{-| Expose the currently focused dates
 -}
-focusedDate : DatePicker -> Maybe Date
+focusedDate : DatePicker -> ( Maybe Date, Maybe Date )
 focusedDate (DatePicker model) =
-    model.focused
+    (,) model.firstFocused model.secondFocused
 
 
 {-| A sugaring of `Maybe` to explicitly tell you how to interpret `Changed Nothing`, because `Just Nothing` seems somehow wrong.
@@ -321,40 +334,50 @@ inDirection firstDate secondDate =
 date.
 -}
 update : Settings -> Msg -> DatePicker -> ( DatePicker, Cmd Msg, DateEvent )
-update settings msg (DatePicker ({ forceOpen, focused } as model)) =
+update settings msg (DatePicker ({ forceOpen, firstFocused, secondFocused } as model)) =
     case msg of
         CurrentDate date ->
-            { model | focused = Just date, today = date } ! []
+            { model
+                | firstFocused = Just date
+                , secondFocused = Just (nextMonth date)
+                , today = date
+            }
+                ! []
 
-        ChangeFocus date ->
-            { model | focused = Just date } ! []
+        ChangeFirstFocus date ->
+            { model | firstFocused = Just date } ! []
 
-        Pick firstDate secondDate date ->
+        ChangeSecondFocus date ->
+            { model | secondFocused = Just date } ! []
+
+        Pick firstDate secondDate date whichPicker ->
             let
                 ( startDate, finishDate, _ ) =
                     inDirection firstDate secondDate
+
+                dateEvent =
+                    case startDate of
+                        Nothing ->
+                            Changed date Nothing
+
+                        _ ->
+                            case finishDate of
+                                Nothing ->
+                                    let
+                                        ( earlierDate, laterDate, _ ) =
+                                            inDirection startDate date
+                                    in
+                                    Changed earlierDate laterDate
+
+                                _ ->
+                                    Changed date Nothing
             in
             ( DatePicker <|
                 { model
                     | inputText = Nothing
-                    , focused = Nothing
                 }
             , Cmd.none
-            , case startDate of
-                Nothing ->
-                    Changed date Nothing
-
-                _ ->
-                    case finishDate of
-                        Nothing ->
-                            let
-                                ( earlierDate, laterDate, _ ) =
-                                    inDirection startDate date
-                            in
-                            Changed earlierDate laterDate
-
-                        _ ->
-                            Changed date Nothing
+            , dateEvent
             )
 
         Text text ->
@@ -399,13 +422,20 @@ update settings msg (DatePicker ({ forceOpen, focused } as model)) =
                 { model
                     | inputText =
                         Nothing
-                    , focused =
+                    , firstFocused =
                         case dateEvent of
-                            Changed _ _ ->
-                                Nothing
+                            Changed a _ ->
+                                a
 
                             NoChange ->
-                                model.focused
+                                model.firstFocused
+                    , secondFocused =
+                        case dateEvent of
+                            Changed _ b ->
+                                b
+
+                            NoChange ->
+                                model.secondFocused
                 }
             , Cmd.none
             , dateEvent
@@ -442,7 +472,7 @@ Rather, it will:
     update datepickerSettings (pick firstPickedDate secondPickedDate (Just someDate)) datepicker
 
 -}
-pick : Maybe Date -> Maybe Date -> Maybe Date -> Msg
+pick : Maybe Date -> Maybe Date -> Maybe Date -> WhichPicker -> Msg
 pick =
     Pick
 
@@ -501,14 +531,20 @@ view firstDate secondDate settings (DatePicker ({ open } as model)) =
         [ class "container" ]
         [ ( "dateInput", dateInput )
         , if open then
-            ( "datePicker", datePicker firstDate secondDate settings model )
+            ( "doublePicker"
+            , div
+                [ class "pickers-container" ]
+                [ datePicker firstDate secondDate settings model model.firstFocused ChangeFirstFocus FirstPicker
+                , datePicker firstDate secondDate settings model model.secondFocused ChangeSecondFocus SecondPicker
+                ]
+            )
           else
             ( "text", text "" )
         ]
 
 
-datePicker : Maybe Date -> Maybe Date -> Settings -> Model -> Html Msg
-datePicker firstDate secondDate settings ({ focused, today, hoverDate } as model) =
+datePicker : Maybe Date -> Maybe Date -> Settings -> Model -> Maybe Date -> (Date -> Msg) -> WhichPicker -> Html Msg
+datePicker firstDate secondDate settings ({ today, hoverDate } as model) focused changeFocusMsg whichPicker =
     let
         currentDate =
             focused ??> firstDate ?> today
@@ -595,8 +631,8 @@ datePicker firstDate secondDate settings ({ focused, today, hoverDate } as model
                     settings.isDisabled d
 
                 props =
-                    if not disabled then
-                        [ onClick (Pick firstDate secondDate (Just d))
+                    if not disabled && (month currentMonth == month d) then
+                        [ onClick (Pick firstDate secondDate (Just d) whichPicker)
                         , onMouseOver (Over (Just d))
                         ]
                     else
@@ -643,7 +679,7 @@ datePicker firstDate secondDate settings ({ focused, today, hoverDate } as model
 
         dropdownYear =
             Html.Keyed.node "select"
-                [ onChange (newYear currentDate >> ChangeFocus), class "year-menu" ]
+                [ onChange (newYear currentDate >> changeFocusMsg), class "year-menu" ]
                 (List.indexedMap yearOption
                     (yearRange { focused = currentDate, currentMonth = currentMonth } settings.changeYear)
                 )
@@ -657,7 +693,7 @@ datePicker firstDate secondDate settings ({ focused, today, hoverDate } as model
         ]
         [ div [ class "picker-header" ]
             [ div [ class "prev-container" ]
-                [ arrow "prev" (ChangeFocus (prevMonth currentDate)) ]
+                [ arrow "prev" (changeFocusMsg (prevMonth currentDate)) ]
             , div [ class "month-container" ]
                 [ span [ class "month" ]
                     [ text <| settings.monthFormatter <| month currentMonth ]
@@ -669,7 +705,7 @@ datePicker firstDate secondDate settings ({ focused, today, hoverDate } as model
                     ]
                 ]
             , div [ class "next-container" ]
-                [ arrow "next" (ChangeFocus (nextMonth currentDate)) ]
+                [ arrow "next" (changeFocusMsg (nextMonth currentDate)) ]
             ]
         , table [ class "table" ]
             [ thead [ class "weekdays" ]

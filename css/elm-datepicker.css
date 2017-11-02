@@ -5,9 +5,15 @@
   outline: 0; }
 
 .elm-datepicker--picker {
-  position: absolute;
+  position: relative;
+  max-width: 190px;
   border: 1px solid #CCC;
   z-index: 10; }
+  .elm-datepicker--picker-right {
+    position: relative;
+    max-width: 190px;
+    border: 1px solid #CCC;
+    z-index: 10; }
 
 .elm-datepicker--picker-header,
 .elm-datepicker--weekdays {

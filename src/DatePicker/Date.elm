@@ -1,23 +1,23 @@
 module DatePicker.Date
     exposing
         ( YearRange(..)
-        , initDate
-        , formatDate
-        , formatDay
-        , formatMonth
         , addDays
         , addDows
-        , subDays
         , dateTuple
         , datesInRange
         , firstOfMonth
-        , prevMonth
-        , nextMonth
+        , formatDate
+        , formatDay
+        , formatMonth
+        , initDate
         , newYear
+        , nextMonth
+        , prevMonth
+        , subDays
         , yearRange
         )
 
-import Date exposing (Date, Day(..), Month(..), year, month, day)
+import Date exposing (Date, Day(..), Month(..), day, month, year)
 
 
 type alias Year =
@@ -139,10 +139,10 @@ trimDates firstDay dates =
                     else
                         dr xs
     in
-        dl dates
-            |> List.reverse
-            |> dr
-            |> List.reverse
+    dl dates
+        |> List.reverse
+        |> dr
+        |> List.reverse
 
 
 datesInRange : Date.Day -> Date -> Date -> List Date
@@ -153,13 +153,13 @@ datesInRange firstDay min max =
                 y =
                     subDay x
             in
-                if dateTuple y == dateTuple min then
-                    y :: acc
-                else
-                    go y (y :: acc)
+            if dateTuple y == dateTuple min then
+                y :: acc
+            else
+                go y (y :: acc)
     in
-        go max []
-            |> trimDates firstDay
+    go max []
+        |> trimDates firstDay
 
 
 dateTuple : Date -> ( Int, Int, Int )
@@ -176,7 +176,7 @@ repeat f =
             else
                 go (n - 1) (f x)
     in
-        go
+    go
 
 
 firstOfMonth : Date -> Date
@@ -196,7 +196,7 @@ nextMonth date =
             else
                 year date
     in
-        mkDate nextYear nextMonth 1
+    mkDate nextYear nextMonth 1
 
 
 prevMonth : Date -> Date
@@ -211,7 +211,7 @@ prevMonth date =
             else
                 year date
     in
-        mkDate prevYear prevMonth 1
+    mkDate prevYear prevMonth 1
 
 
 addDays : Int -> Date -> Date
@@ -243,10 +243,10 @@ addDay date =
             else
                 year
     in
-        if day > dim then
-            mkDate succYear succ 1
-        else
-            mkDate year month day
+    if day > dim then
+        mkDate succYear succ 1
+    else
+        mkDate year month day
 
 
 subDays : Int -> Date -> Date
@@ -275,10 +275,10 @@ subDay date =
             else
                 year
     in
-        if day < 1 then
-            mkDate predYear pred (daysInMonth predYear pred)
-        else
-            mkDate year month day
+    if day < 1 then
+        mkDate predYear pred (daysInMonth predYear pred)
+    else
+        mkDate year month day
 
 
 addDows : Int -> Date.Day -> Date.Day
@@ -306,10 +306,10 @@ predDow day =
             (dayToInt day - 1)
                 |> flip rem 7
     in
-        if prev == 0 then
-            Sun
-        else
-            dayFromInt prev
+    if prev == 0 then
+        Sun
+    else
+        dayFromInt prev
 
 
 dayToString : Int -> String
@@ -379,10 +379,10 @@ monthToString month =
         int =
             monthToInt month
     in
-        if int < 10 then
-            "0" ++ toString int
-        else
-            toString int
+    if int < 10 then
+        "0" ++ toString int
+    else
+        toString int
 
 
 predMonth : Month -> Month
@@ -392,10 +392,10 @@ predMonth month =
             (monthToInt month - 1)
                 |> flip rem 12
     in
-        if prev == 0 then
-            Dec
-        else
-            monthFromInt prev
+    if prev == 0 then
+        Dec
+    else
+        monthFromInt prev
 
 
 succMonth : Month -> Month
@@ -564,14 +564,14 @@ newYear currentMonth newYear =
             mkDate year (month currentMonth) (day currentMonth)
 
         Err _ ->
-            Debug.crash ("Unknown Month " ++ (toString currentMonth))
+            Debug.crash ("Unknown Month " ++ toString currentMonth)
 
 
 yearRange : { focused : Date, currentMonth : Date } -> YearRange -> List Int
 yearRange { focused, currentMonth } range =
     case range of
         MoreOrLess num ->
-            List.range ((year currentMonth) - num) ((year currentMonth) + num)
+            List.range (year currentMonth - num) (year currentMonth + num)
 
         Between start end ->
             List.range start end
