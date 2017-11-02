@@ -58,7 +58,6 @@ type Msg
     | MouseDown
     | MouseUp
     | Over (Maybe Date)
-    | Close
 
 
 {-| The type of date picker settings.
@@ -374,28 +373,32 @@ update settings msg (DatePicker ({ forceOpen, focused } as model)) =
                     if isWhitespace text then
                         Changed Nothing Nothing
                     else
-                        text
-                            |> settings.parser
-                            |> Result.map
-                                (Changed Nothing
-                                    << (\date ->
-                                            if settings.isDisabled date then
-                                                Nothing
-                                            else
-                                                Just date
-                                       )
-                                )
+                        let
+                            startDate =
+                                settings.parser (Maybe.withDefault "" (List.head (String.words text)))
+
+                            finishDate =
+                                settings.parser (Maybe.withDefault "" (List.head (List.reverse (String.words text))))
+                        in
+                        Result.map2
+                            (\firstDate secondDate ->
+                                if settings.isDisabled firstDate then
+                                    Changed Nothing Nothing
+                                else
+                                    let
+                                        ( startDate, finishDate, _ ) =
+                                            inDirection (Just firstDate) (Just secondDate)
+                                    in
+                                    Changed startDate finishDate
+                            )
+                            startDate
+                            finishDate
                             |> Result.withDefault NoChange
             in
             ( DatePicker <|
                 { model
                     | inputText =
-                        case dateEvent of
-                            Changed _ _ ->
-                                Nothing
-
-                            NoChange ->
-                                model.inputText
+                        Nothing
                     , focused =
                         case dateEvent of
                             Changed _ _ ->
@@ -422,9 +425,6 @@ update settings msg (DatePicker ({ forceOpen, focused } as model)) =
 
         Over date ->
             { model | hoverDate = date } ! []
-
-        Close ->
-            { model | open = False } ! []
 
 
 {-| Generate a message that will act as if the user has chosen a certain date,
@@ -486,8 +486,13 @@ view firstDate secondDate settings (DatePicker ({ open } as model)) =
                 [ placeholder settings.placeholder
                 , model.inputText
                     |> Maybe.withDefault
-                        (Maybe.map settings.dateFormatter firstDate
-                            |> Maybe.withDefault ""
+                        ((Maybe.map settings.dateFormatter firstDate
+                            |> Maybe.withDefault "..."
+                         )
+                            ++ " to "
+                            ++ (Maybe.map settings.dateFormatter secondDate
+                                    |> Maybe.withDefault "..."
+                               )
                         )
                     |> value
                 ]
@@ -648,7 +653,7 @@ datePicker firstDate secondDate settings ({ focused, today, hoverDate } as model
         , onPicker "mousedown" MouseDown
         , onPicker "mouseup" MouseUp
         , tabindex 2
-        , onBlur Close
+        , onBlur Blur
         ]
         [ div [ class "picker-header" ]
             [ div [ class "prev-container" ]
