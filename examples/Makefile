@@ -1,4 +1,4 @@
-all: simple-example bootstrap-example range-example range2-example
+all: simple-example bootstrap-example range-example range2-example simple-nightwatch-example
 
 simple-example:
 	cd .. && elm make --warn examples/simple/Simple.elm --output=examples/simple/simple.js
@@ -11,3 +11,6 @@ range-example:
 
 range2-example:
 	cd .. && elm make --warn examples/range2/Range2.elm --output=examples/range2/range2.js
+
+simple-nightwatch-example:
+	cd .. && elm make --warn examples/simple-nightwatch/SimpleNightwatch.elm --output=examples/simple-nightwatch/simple-nightwatch.js
