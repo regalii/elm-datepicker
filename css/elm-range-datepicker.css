@@ -1,17 +1,25 @@
 .elm-datepicker--container {
   position: relative; }
 
+.elm-datepicker--pickers-container {
+  position: absolute; 
+  border: 1px solid #CCC; 
+  max-width: 420px;
+  outline: 0; }
+
+.elm-datepicker--input {
+  display: block; }
+
 .elm-datepicker--input:focus {
   outline: 0; }
 
 .elm-datepicker--picker {
-  position: absolute;
-  border: 1px solid #CCC;
-  z-index: 10; }
-
-.elm-datepicker--picker-header,
-.elm-datepicker--weekdays {
-  background: #F2F2F2; }
+  position: relative;
+  max-width: 190px;
+  display: inline-block;
+  margin: 10px;
+  z-index: 10; 
+  outline: 0;}
 
 .elm-datepicker--picker-header {
   display: flex;
@@ -76,6 +84,9 @@
   .elm-datepicker--day:hover {
     background: #F2F2F2; }
 
+.elm-datepicker--range {
+  background: #F2F2F2; }
+
 .elm-datepicker--disabled {
   cursor: default;
   color: #DDD; }
@@ -92,7 +103,9 @@
   font-weight: bold; }
 
 .elm-datepicker--other-month {
-  color: #AAA; }
+  color: #AAA; 
+  cursor: default;
+  visibility: hidden; }
   .elm-datepicker--other-month.elm-datepicker--disabled {
     color: #EEE; }
   .elm-datepicker--other-month.elm-datepicker--picked {
