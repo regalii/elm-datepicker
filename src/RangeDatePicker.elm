@@ -643,7 +643,7 @@ datePicker firstDate secondDate settings ({ today, hoverDate } as model) focused
                     [ ( "day", True )
                     , ( "disabled", disabled )
                     , ( "picked", picked d )
-                    , ( "today", dateTuple d == dateTuple currentDate )
+                    , ( "today", dateTuple d == dateTuple today )
                     , ( "other-month", month currentMonth /= month d )
                     , ( "range", inRange (Just d) )
                     ]
