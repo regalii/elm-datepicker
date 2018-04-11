@@ -51,7 +51,8 @@ type Msg
     = CurrentDate Date
     | ChangeFocus Date
     | Pick (Maybe Date)
-    | SubmitText String
+    | Text String
+    | SubmitText
     | Focus
     | Blur
     | MouseDown
@@ -63,6 +64,7 @@ type Msg
 type alias Settings =
     { placeholder : String
     , classNamespace : String
+    , containerClassList : List ( String, Bool )
     , inputClassList : List ( String, Bool )
     , inputName : Maybe String
     , inputId : Maybe String
@@ -86,6 +88,8 @@ type alias Model =
         Maybe Date
 
     -- date currently center-focused by picker, but not necessarily chosen
+    , inputText :
+        Maybe String
     , today :
         Date
 
@@ -118,6 +122,7 @@ defaultSettings : Settings
 defaultSettings =
     { placeholder = "Please pick a date..."
     , classNamespace = "elm-datepicker--"
+    , containerClassList = []
     , inputClassList = []
     , inputName = Nothing
     , inputId = Nothing
@@ -208,7 +213,7 @@ for the date picker to behave correctly.
             ( datePicker, datePickerFx ) =
                 DatePicker.init
         in
-        { picker = datePicker } ! [ Cmd.map ToDatePicker datePickerfx ]
+            { picker = datePicker } ! [ Cmd.map ToDatePicker datePickerfx ]
 
 -}
 init : ( DatePicker, Cmd Msg )
@@ -217,6 +222,7 @@ init =
         { open = False
         , forceOpen = False
         , focused = Just initDate
+        , inputText = Nothing
         , today = initDate
         }
     , Task.perform CurrentDate Date.now
@@ -235,6 +241,7 @@ initFromDate date =
         { open = False
         , forceOpen = False
         , focused = Just date
+        , inputText = Nothing
         , today = date
         }
 
@@ -251,6 +258,7 @@ initFromDates today date =
         { open = False
         , forceOpen = False
         , focused = date
+        , inputText = Nothing
         , today = today
         }
 
@@ -264,9 +272,9 @@ prepareDates date firstDayOfWeek =
         end =
             nextMonth date |> addDays 6
     in
-    { currentMonth = date
-    , currentDates = datesInRange firstDayOfWeek start end
-    }
+        { currentMonth = date
+        , currentDates = datesInRange firstDayOfWeek start end
+        }
 
 
 {-| Expose if the datepicker is open
@@ -307,47 +315,67 @@ update settings msg (DatePicker ({ forceOpen, focused } as model)) =
             ( DatePicker <|
                 { model
                     | open = False
+                    , inputText = Nothing
                     , focused = Nothing
                 }
             , Cmd.none
             , Changed date
             )
 
-        SubmitText inputText ->
+        Text text ->
+            { model | inputText = Just text } ! []
+
+        SubmitText ->
             let
                 isWhitespace =
                     String.trim >> String.isEmpty
 
                 dateEvent =
-                    if isWhitespace inputText then
-                        Changed Nothing
-                    else
-                        inputText
-                            |> settings.parser
-                            |> Result.map
-                                (Changed
-                                    << (\date ->
-                                            if settings.isDisabled date then
-                                                Nothing
-                                            else
-                                                Just date
-                                       )
-                                )
-                            |> Result.withDefault NoChange
+                    let
+                        text =
+                            model.inputText ?> ""
+                    in
+                        if isWhitespace text then
+                            Changed Nothing
+                        else
+                            text
+                                |> settings.parser
+                                |> Result.map
+                                    (Changed
+                                        << (\date ->
+                                                if settings.isDisabled date then
+                                                    Nothing
+                                                else
+                                                    Just date
+                                           )
+                                    )
+                                |> Result.withDefault NoChange
             in
-            ( DatePicker <|
-                { model
-                    | focused =
-                        case dateEvent of
-                            Changed _ ->
-                                Nothing
+                ( DatePicker <|
+                    { model
+                        | inputText =
+                            case dateEvent of
+                                Changed change ->
+                                    Nothing
 
-                            NoChange ->
-                                model.focused
-                }
-            , Cmd.none
-            , dateEvent
-            )
+                                NoChange ->
+                                    model.inputText
+                        , focused =
+                            case dateEvent of
+                                Changed change ->
+                                    case change of
+                                        Just date ->
+                                            Just date
+
+                                        Nothing ->
+                                            Nothing
+
+                                NoChange ->
+                                    model.focused
+                    }
+                , Cmd.none
+                , dateEvent
+                )
 
         Focus ->
             { model | open = True, forceOpen = False } ! []
@@ -367,9 +395,12 @@ so you can call `update` on the model yourself.
 Note that this is different from just changing the "current chosen" date,
 since the picker doesn't actually have internal state for that.
 Rather, it will:
-* change the calendar focus
-* replace the input text with the new value
-* close the picker
+
+  - change the calendar focus
+
+  - replace the input text with the new value
+
+  - close the picker
 
     update datepickerSettings (pick (Just someDate)) datepicker
 
@@ -401,7 +432,8 @@ view pickedDate settings (DatePicker ({ open } as model)) =
                 ([ Attrs.classList inputClasses
                  , Attrs.name (settings.inputName ?> "")
                  , type_ "text"
-                 , on "change" (Json.map SubmitText targetValue)
+                 , on "change" (Json.succeed SubmitText)
+                 , onInput Text
                  , onBlur Blur
                  , onClick Focus
                  , onFocus Focus
@@ -415,19 +447,25 @@ view pickedDate settings (DatePicker ({ open } as model)) =
         dateInput =
             inputCommon
                 [ placeholder settings.placeholder
-                , (Maybe.map settings.dateFormatter pickedDate
-                    |> Maybe.withDefault ""
-                  )
+                , model.inputText
+                    |> Maybe.withDefault
+                        (Maybe.map settings.dateFormatter pickedDate
+                            |> Maybe.withDefault ""
+                        )
                     |> value
                 ]
+
+        containerClassList =
+            ( "container", True ) :: settings.containerClassList
     in
-    div [ class "container" ]
-        [ dateInput
-        , if open then
-            datePicker pickedDate settings model
-          else
-            text ""
-        ]
+        div
+            [ Attrs.classList containerClassList ]
+            [ dateInput
+            , if open then
+                datePicker pickedDate settings model
+              else
+                text ""
+            ]
 
 
 datePicker : Maybe Date -> Settings -> Model -> Html Msg
@@ -477,18 +515,18 @@ datePicker pickedDate settings ({ focused, today } as model) =
                     else
                         []
             in
-            td
-                ([ classList
-                    [ ( "day", True )
-                    , ( "disabled", disabled )
-                    , ( "picked", picked d )
-                    , ( "today", dateTuple d == dateTuple currentDate )
-                    , ( "other-month", month currentMonth /= month d )
-                    ]
-                 ]
-                    ++ props
-                )
-                [ settings.cellFormatter <| toString <| Date.day d ]
+                td
+                    ([ classList
+                        [ ( "day", True )
+                        , ( "disabled", disabled )
+                        , ( "picked", picked d )
+                        , ( "today", dateTuple d == dateTuple currentDate )
+                        , ( "other-month", month currentMonth /= month d )
+                        ]
+                     ]
+                        ++ props
+                    )
+                    [ settings.cellFormatter <| toString <| Date.day d ]
 
         row days =
             tr [ class "row" ] (List.map day days)
@@ -519,45 +557,45 @@ datePicker pickedDate settings ({ focused, today } as model) =
             Html.Keyed.node "select"
                 [ onChange (newYear currentDate >> ChangeFocus), class "year-menu" ]
                 (List.indexedMap yearOption
-                    (yearRange { focused = currentDate, currentMonth = currentMonth } settings.changeYear)
+                    (yearRange { currentMonth = currentMonth, today = today } settings.changeYear)
                 )
     in
-    div
-        [ class "picker"
-        , onPicker "mousedown" MouseDown
-        , onPicker "mouseup" MouseUp
-        ]
-        [ div [ class "picker-header" ]
-            [ div [ class "prev-container" ]
-                [ arrow "prev" (ChangeFocus (prevMonth currentDate)) ]
-            , div [ class "month-container" ]
-                [ span [ class "month" ]
-                    [ text <| settings.monthFormatter <| month currentMonth ]
-                , span [ class "year" ]
-                    [ if not (yearRangeActive settings.changeYear) then
-                        text <| settings.yearFormatter <| year currentMonth
-                      else
-                        Html.Keyed.node "span" [] [ ( toString (year currentMonth), dropdownYear ) ]
-                    ]
-                ]
-            , div [ class "next-container" ]
-                [ arrow "next" (ChangeFocus (nextMonth currentDate)) ]
+        div
+            [ class "picker"
+            , onPicker "mousedown" MouseDown
+            , onPicker "mouseup" MouseUp
             ]
-        , table [ class "table" ]
-            [ thead [ class "weekdays" ]
-                [ tr []
-                    [ dow <| firstDay
-                    , dow <| addDows 1 firstDay
-                    , dow <| addDows 2 firstDay
-                    , dow <| addDows 3 firstDay
-                    , dow <| addDows 4 firstDay
-                    , dow <| addDows 5 firstDay
-                    , dow <| addDows 6 firstDay
+            [ div [ class "picker-header" ]
+                [ div [ class "prev-container" ]
+                    [ arrow "prev" (ChangeFocus (prevMonth currentDate)) ]
+                , div [ class "month-container" ]
+                    [ span [ class "month" ]
+                        [ text <| settings.monthFormatter <| month currentMonth ]
+                    , span [ class "year" ]
+                        [ if not (yearRangeActive settings.changeYear) then
+                            text <| settings.yearFormatter <| year currentMonth
+                          else
+                            Html.Keyed.node "span" [] [ ( toString (year currentMonth), dropdownYear ) ]
+                        ]
                     ]
+                , div [ class "next-container" ]
+                    [ arrow "next" (ChangeFocus (nextMonth currentDate)) ]
                 ]
-            , tbody [ class "days" ] days
+            , table [ class "table" ]
+                [ thead [ class "weekdays" ]
+                    [ tr []
+                        [ dow <| firstDay
+                        , dow <| addDows 1 firstDay
+                        , dow <| addDows 2 firstDay
+                        , dow <| addDows 3 firstDay
+                        , dow <| addDows 4 firstDay
+                        , dow <| addDows 5 firstDay
+                        , dow <| addDows 6 firstDay
+                        ]
+                    ]
+                , tbody [ class "days" ] days
+                ]
             ]
-        ]
 
 
 {-| Turn a list of dates into a list of date rows with 7 columns per
@@ -577,7 +615,7 @@ groupDates dates =
                     else
                         go (i + 1) xs (x :: racc) acc
     in
-    go 0 dates [] []
+        go 0 dates [] []
 
 
 mkClass : Settings -> String -> Html.Attribute msg
