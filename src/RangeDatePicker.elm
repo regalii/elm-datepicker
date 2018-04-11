@@ -227,7 +227,7 @@ for the date picker to behave correctly.
             ( datePicker, datePickerFx ) =
                 DatePicker.init
         in
-        { picker = datePicker } ! [ Cmd.map ToDatePicker datePickerfx ]
+            { picker = datePicker } ! [ Cmd.map ToDatePicker datePickerfx ]
 
 -}
 init : ( DatePicker, Cmd Msg )
@@ -292,9 +292,9 @@ prepareDates date firstDayOfWeek =
         end =
             nextMonth date |> addDays 6
     in
-    { currentMonth = date
-    , currentDates = datesInRange firstDayOfWeek start end
-    }
+        { currentMonth = date
+        , currentDates = datesInRange firstDayOfWeek start end
+        }
 
 
 {-| Expose if the datepicker is open
@@ -367,18 +367,18 @@ update settings msg (DatePicker ({ forceOpen, firstFocused, secondFocused } as m
                                         ( earlierDate, laterDate, _ ) =
                                             inDirection startDate date
                                     in
-                                    Changed earlierDate laterDate
+                                        Changed earlierDate laterDate
 
                                 _ ->
                                     Changed date Nothing
             in
-            ( DatePicker <|
-                { model
-                    | inputText = Nothing
-                }
-            , Cmd.none
-            , dateEvent
-            )
+                ( DatePicker <|
+                    { model
+                        | inputText = Nothing
+                    }
+                , Cmd.none
+                , dateEvent
+                )
 
         Text text ->
             { model | inputText = Just text } ! []
@@ -393,53 +393,53 @@ update settings msg (DatePicker ({ forceOpen, firstFocused, secondFocused } as m
                         text =
                             model.inputText ?> ""
                     in
-                    if isWhitespace text then
-                        Changed Nothing Nothing
-                    else
-                        let
-                            startDate =
-                                settings.parser (Maybe.withDefault "" (List.head (String.words text)))
+                        if isWhitespace text then
+                            Changed Nothing Nothing
+                        else
+                            let
+                                startDate =
+                                    settings.parser (Maybe.withDefault "" (List.head (String.words text)))
 
-                            finishDate =
-                                settings.parser (Maybe.withDefault "" (List.head (List.reverse (String.words text))))
-                        in
-                        Result.map2
-                            (\firstDate secondDate ->
-                                if settings.isDisabled firstDate then
-                                    Changed Nothing Nothing
-                                else
-                                    let
-                                        ( startDate, finishDate, _ ) =
-                                            inDirection (Just firstDate) (Just secondDate)
-                                    in
-                                    Changed startDate finishDate
-                            )
-                            startDate
-                            finishDate
-                            |> Result.withDefault NoChange
+                                finishDate =
+                                    settings.parser (Maybe.withDefault "" (List.head (List.reverse (String.words text))))
+                            in
+                                Result.map2
+                                    (\firstDate secondDate ->
+                                        if settings.isDisabled firstDate then
+                                            Changed Nothing Nothing
+                                        else
+                                            let
+                                                ( startDate, finishDate, _ ) =
+                                                    inDirection (Just firstDate) (Just secondDate)
+                                            in
+                                                Changed startDate finishDate
+                                    )
+                                    startDate
+                                    finishDate
+                                    |> Result.withDefault NoChange
             in
-            ( DatePicker <|
-                { model
-                    | inputText =
-                        Nothing
-                    , firstFocused =
-                        case dateEvent of
-                            Changed a _ ->
-                                a
+                ( DatePicker <|
+                    { model
+                        | inputText =
+                            Nothing
+                        , firstFocused =
+                            case dateEvent of
+                                Changed a _ ->
+                                    a
 
-                            NoChange ->
-                                model.firstFocused
-                    , secondFocused =
-                        case dateEvent of
-                            Changed _ b ->
-                                b
+                                NoChange ->
+                                    model.firstFocused
+                        , secondFocused =
+                            case dateEvent of
+                                Changed _ b ->
+                                    b
 
-                            NoChange ->
-                                model.secondFocused
-                }
-            , Cmd.none
-            , dateEvent
-            )
+                                NoChange ->
+                                    model.secondFocused
+                    }
+                , Cmd.none
+                , dateEvent
+                )
 
         Focus ->
             { model | open = True, forceOpen = False } ! []
@@ -527,20 +527,20 @@ view firstDate secondDate settings (DatePicker ({ open } as model)) =
                     |> value
                 ]
     in
-    Html.Keyed.node "div"
-        [ class "container" ]
-        [ ( "dateInput", dateInput )
-        , if open then
-            ( "doublePicker"
-            , div
-                [ class "pickers-container" ]
-                [ datePicker firstDate secondDate settings model model.firstFocused ChangeFirstFocus FirstPicker
-                , datePicker firstDate secondDate settings model model.secondFocused ChangeSecondFocus SecondPicker
-                ]
-            )
-          else
-            ( "text", text "" )
-        ]
+        Html.Keyed.node "div"
+            [ class "container" ]
+            [ ( "dateInput", dateInput )
+            , if open then
+                ( "doublePicker"
+                , div
+                    [ class "pickers-container" ]
+                    [ datePicker firstDate secondDate settings model model.firstFocused ChangeFirstFocus FirstPicker
+                    , datePicker firstDate secondDate settings model model.secondFocused ChangeSecondFocus SecondPicker
+                    ]
+                )
+              else
+                ( "text", text "" )
+            ]
 
 
 datePicker : Maybe Date -> Maybe Date -> Settings -> Model -> Maybe Date -> (Date -> Msg) -> WhichPicker -> Html Msg
@@ -578,40 +578,40 @@ datePicker firstDate secondDate settings ({ today, hoverDate } as model) focused
                 ( startDate, finishDate, _ ) =
                     inDirection firstDate secondDate
             in
-            case startDate of
-                Nothing ->
-                    False
+                case startDate of
+                    Nothing ->
+                        False
 
-                _ ->
-                    case finishDate of
-                        Nothing ->
-                            let
-                                ( _, _, isLaterThenStart ) =
-                                    inDirection startDate d
+                    _ ->
+                        case finishDate of
+                            Nothing ->
+                                let
+                                    ( _, _, isLaterThenStart ) =
+                                        inDirection startDate d
 
-                                ( _, _, isEarlierThenHover ) =
-                                    inDirection d hoverDate
-                            in
-                            if
-                                (isLaterThenStart && isEarlierThenHover)
-                                    || (not isLaterThenStart && not isEarlierThenHover)
-                            then
-                                True
-                            else
-                                False
+                                    ( _, _, isEarlierThenHover ) =
+                                        inDirection d hoverDate
+                                in
+                                    if
+                                        (isLaterThenStart && isEarlierThenHover)
+                                            || (not isLaterThenStart && not isEarlierThenHover)
+                                    then
+                                        True
+                                    else
+                                        False
 
-                        _ ->
-                            let
-                                ( _, _, isLaterThenStart ) =
-                                    inDirection startDate d
+                            _ ->
+                                let
+                                    ( _, _, isLaterThenStart ) =
+                                        inDirection startDate d
 
-                                ( _, _, isEarlierThenFinish ) =
-                                    inDirection d finishDate
-                            in
-                            if isLaterThenStart && isEarlierThenFinish then
-                                True
-                            else
-                                False
+                                    ( _, _, isEarlierThenFinish ) =
+                                        inDirection d finishDate
+                                in
+                                    if isLaterThenStart && isEarlierThenFinish then
+                                        True
+                                    else
+                                        False
 
         picked d =
             (firstDate
@@ -638,19 +638,19 @@ datePicker firstDate secondDate settings ({ today, hoverDate } as model) focused
                     else
                         []
             in
-            td
-                ([ classList
-                    [ ( "day", True )
-                    , ( "disabled", disabled )
-                    , ( "picked", picked d )
-                    , ( "today", dateTuple d == dateTuple today )
-                    , ( "other-month", month currentMonth /= month d )
-                    , ( "range", inRange (Just d) )
-                    ]
-                 ]
-                    ++ props
-                )
-                [ settings.cellFormatter <| toString <| Date.day d ]
+                td
+                    ([ classList
+                        [ ( "day", True )
+                        , ( "disabled", disabled )
+                        , ( "picked", picked d )
+                        , ( "today", dateTuple d == dateTuple today )
+                        , ( "other-month", month currentMonth /= month d )
+                        , ( "range", inRange (Just d) )
+                        ]
+                     ]
+                        ++ props
+                    )
+                    [ settings.cellFormatter <| toString <| Date.day d ]
 
         row days =
             tr [ class "row" ] (List.map day days)
@@ -681,47 +681,47 @@ datePicker firstDate secondDate settings ({ today, hoverDate } as model) focused
             Html.Keyed.node "select"
                 [ onChange (newYear currentDate >> changeFocusMsg), class "year-menu" ]
                 (List.indexedMap yearOption
-                    (yearRange { focused = currentDate, currentMonth = currentMonth } settings.changeYear)
+                    (yearRange { currentMonth = currentMonth, today = currentDate } settings.changeYear)
                 )
     in
-    div
-        [ class "picker"
-        , onPicker "mousedown" MouseDown
-        , onPicker "mouseup" MouseUp
-        , tabindex 2
-        , onBlur Blur
-        ]
-        [ div [ class "picker-header" ]
-            [ div [ class "prev-container" ]
-                [ arrow "prev" (changeFocusMsg (prevMonth currentDate)) ]
-            , div [ class "month-container" ]
-                [ span [ class "month" ]
-                    [ text <| settings.monthFormatter <| month currentMonth ]
-                , span [ class "year" ]
-                    [ if not (yearRangeActive settings.changeYear) then
-                        text <| settings.yearFormatter <| year currentMonth
-                      else
-                        Html.Keyed.node "span" [] [ ( toString (year currentMonth), dropdownYear ) ]
-                    ]
-                ]
-            , div [ class "next-container" ]
-                [ arrow "next" (changeFocusMsg (nextMonth currentDate)) ]
+        div
+            [ class "picker"
+            , onPicker "mousedown" MouseDown
+            , onPicker "mouseup" MouseUp
+            , tabindex 2
+            , onBlur Blur
             ]
-        , table [ class "table" ]
-            [ thead [ class "weekdays" ]
-                [ tr []
-                    [ dow <| firstDay
-                    , dow <| addDows 1 firstDay
-                    , dow <| addDows 2 firstDay
-                    , dow <| addDows 3 firstDay
-                    , dow <| addDows 4 firstDay
-                    , dow <| addDows 5 firstDay
-                    , dow <| addDows 6 firstDay
+            [ div [ class "picker-header" ]
+                [ div [ class "prev-container" ]
+                    [ arrow "prev" (changeFocusMsg (prevMonth currentDate)) ]
+                , div [ class "month-container" ]
+                    [ span [ class "month" ]
+                        [ text <| settings.monthFormatter <| month currentMonth ]
+                    , span [ class "year" ]
+                        [ if not (yearRangeActive settings.changeYear) then
+                            text <| settings.yearFormatter <| year currentMonth
+                          else
+                            Html.Keyed.node "span" [] [ ( toString (year currentMonth), dropdownYear ) ]
+                        ]
                     ]
+                , div [ class "next-container" ]
+                    [ arrow "next" (changeFocusMsg (nextMonth currentDate)) ]
                 ]
-            , tbody [ class "days" ] days
+            , table [ class "table" ]
+                [ thead [ class "weekdays" ]
+                    [ tr []
+                        [ dow <| firstDay
+                        , dow <| addDows 1 firstDay
+                        , dow <| addDows 2 firstDay
+                        , dow <| addDows 3 firstDay
+                        , dow <| addDows 4 firstDay
+                        , dow <| addDows 5 firstDay
+                        , dow <| addDows 6 firstDay
+                        ]
+                    ]
+                , tbody [ class "days" ] days
+                ]
             ]
-        ]
 
 
 {-| Turn a list of dates into a list of date rows with 7 columns per
@@ -741,7 +741,7 @@ groupDates dates =
                     else
                         go (i + 1) xs (x :: racc) acc
     in
-    go 0 dates [] []
+        go 0 dates [] []
 
 
 mkClass : Settings -> String -> Html.Attribute msg
